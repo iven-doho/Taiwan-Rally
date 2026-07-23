@@ -75,7 +75,13 @@ footer .nl input{flex:1;border:none;border-radius:8px;padding:11px 12px;font-fam
 footer .nl button{background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-weight:800;font-family:inherit;cursor:pointer;}
 footer .brand{text-align:center;font-weight:800;letter-spacing:.24em;font-size:20px;padding-top:18px;border-top:1px solid #ffffff33;}
 footer .brand small{display:block;font-size:10px;letter-spacing:.3em;opacity:.85;margin-top:4px;}
+.menu-btn{display:none;background:none;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:16px;line-height:1;color:var(--ink);}
 @media(max-width:840px){
+ header{position:relative;flex-wrap:wrap;}
+ .menu-btn{display:block;}
+ header nav{display:none;width:100%;flex-direction:column;gap:0;margin-top:12px;border-top:1px solid var(--border);}
+ header nav.open{display:flex;}
+ header nav span{padding:13px 4px;border-bottom:1px solid var(--border);font-size:14px;}
  .hero{grid-template-columns:1fr;padding-top:34px;}
  .hero h1{font-size:32px;}
  .prize-row,.steps,.deal-row,footer .cols{grid-template-columns:1fr;}
@@ -87,7 +93,8 @@ footer .brand small{display:block;font-size:10px;letter-spacing:.3em;opacity:.85
 <div class="mocknote">DESIGN MOCK — spec for the Wix homepage rebuild. All copy final-draft; links point to game.feeltaiwan.com.</div>
 <header>
   <div class="logo">FEEL TAIWAN</div>
-  <nav><span>Flight Deals</span><span>In-Taiwan Offers</span><span>Happening Now</span><span>Prizes &amp; Perks</span></nav>
+  <button class="menu-btn" aria-label="Menu" onclick="document.getElementById('nav').classList.toggle('open');this.textContent=document.getElementById('nav').classList.contains('open')?'✕':'☰'">☰</button>
+  <nav id="nav"><span>Flight Deals</span><span>In-Taiwan Offers</span><span>Happening Now</span><span>Prizes &amp; Perks</span></nav>
 </header>
 
 <!-- ═══ HERO: prize-first, one CTA ═══ -->
