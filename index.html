@@ -55,6 +55,10 @@ button{font-family:var(--font);}
 .tok svg{width:52px;height:52px;margin:0 auto 6px;display:block;}
 .tok span{font-size:10.5px;font-weight:700;color:var(--text-mid);display:block;line-height:1.3;}
 .tok.sel span{color:var(--brand);}
+.tokens.airlines .tok{width:104px;padding:9px 6px 7px;}
+.tokens.airlines .tok svg{width:46px;height:46px;margin-bottom:4px;}
+.tokens.airlines .tok.sel{border-color:var(--al,var(--brand));background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.09);}
+.tokens.airlines .tok.sel span{color:var(--al,var(--brand));}
 .partner-note{text-align:center;font-size:11.5px;color:var(--text-light);margin:14px 0 18px;line-height:1.6;}
 .btn{display:flex;align-items:center;justify-content:center;width:100%;padding:15px;background:var(--brand);color:#fff;border:none;border-radius:var(--radius-md);font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px var(--brand-glow);transition:transform .15s;}
 .btn:active{transform:scale(.98);}
@@ -93,7 +97,8 @@ button{font-family:var(--font);}
 .sp.got{background:#f0fdf4;}
 .sp.got::after{content:"✓";position:absolute;top:2px;right:4px;font-size:clamp(8px,1.4vw,12px);font-weight:800;color:var(--green);}
 .sp .pin{position:absolute;bottom:2%;left:50%;transform:translateX(-50%);width:clamp(18px,3.6vw,34px);height:clamp(18px,3.6vw,34px);filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));transition:all .18s;z-index:6;}
-.sp .pin svg{width:100%;height:100%;}
+.sp .pin svg,.sp .pin .tok-img{width:100%;height:100%;object-fit:contain;}
+.tok .tok-img{width:52px;height:52px;object-fit:contain;display:block;margin:0 auto 6px;}
 .center{grid-area:2/2/9/9;display:flex;flex-direction:column;background:radial-gradient(ellipse at 40% 30%,#e7e6d0,#d8dcc4 75%,#ccd2ba);border-radius:8px;position:relative;overflow:hidden;box-shadow:inset 0 0 34px #6b5d4a22;}
 .map-zone{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:3.5% 3% 0;}
 .tpe-gate{position:absolute;left:8px;top:6px;z-index:5;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 9px;border-radius:10px;background:linear-gradient(150deg,#fffdf7,#f1ead9);border:1.5px solid rgba(107,93,74,.34);box-shadow:0 2px 7px rgba(107,93,74,.15);cursor:pointer;transition:transform .18s,box-shadow .18s;}
@@ -129,6 +134,11 @@ button{font-family:var(--font);}
 @keyframes linkMarch{to{stroke-dashoffset:-24;}}
 .cn-panel.docked{border-radius:14px;border:1px solid var(--border);margin-top:10px;box-shadow:0 4px 16px rgba(0,0,0,.06);background:#fff;padding:14px;}
 @media(max-width:620px){
+  .tokens{gap:8px;}
+  .tokens .tok{width:calc(50% - 4px);}
+  .tokens.airlines .tok{width:calc(33.333% - 6px);padding:8px 4px 6px;}
+  .tokens.airlines .tok svg{width:40px;height:40px;}
+  .tokens.airlines .tok span{font-size:9.5px;}
   .board-wrap{aspect-ratio:0.66;}
   .board{grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(11,1fr);}
   .center{grid-area:2/2/11/7;}
@@ -294,13 +304,11 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;o
       <input type="checkbox" id="ckConsent" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">
       <span>I agree to the <a href="#" onclick="return false">Official Rules</a> and to receive sweepstakes-related email. No purchase necessary.</span>
     </label>
-    <div class="tok-label">Choose your travel token</div>
+    <div class="tok-label">Choose your OhBear</div>
     <div class="tokens" id="tokens"></div>
-    <p class="partner-note">Grand prizes provided by our airline partners<br>
-      <span class="pl-chip cal">🌸 China Airlines</span>
-      <span class="pl-chip eva">🌏 EVA Air</span>
-      <span class="pl-chip jx">✦ STARLUX Airlines</span>
-    </p>
+    <div class="tok-label">Choose the airline that flies you SFO&nbsp;→&nbsp;TPE</div>
+    <div class="tokens airlines" id="airlines"></div>
+    <p class="partner-note">Grand prizes provided by our airline partners</p>
     <button class="btn" id="ckStart">Check In &amp; Board ✈️</button>
     <p class="ck-fine">Prototype — registration is not wired to a server. No purchase necessary. See Official Rules.</p>
   </div>
@@ -396,7 +404,7 @@ async function sb(path, body, prefer){
   }catch(e){ return false; }
 }
 const apiRegister=()=>sb('players?on_conflict=email',
-  {email:S.email,name:S.name,token:S.token,consent:true,utm:getUTM()},
+  {email:S.email,name:S.name,token:S.token,airline:S.airline,consent:true,utm:getUTM()},
   'resolution=merge-duplicates,return=minimal');
 let syncT=null;
 function apiProgress(){
@@ -455,10 +463,17 @@ const DETOURS = [
   ok:'A two-hour climb from Sun Moon Lake takes you from subtropical lake air into genuine alpine scenery.'}
 ];
 
+/* ══════════ AIRLINE PARTNERS ══════════
+   The airline is HOW you get from San Francisco to Taipei — the player picks one
+   at check-in, OhBear rides it across the Pacific, and it brands the prize flows.
+   `svg` is the plane art used in the flight intro. */
 const AIRLINES = [
-  {id:'cal', name:'China Airlines', emoji:'🌸', cls:'cal', hex:'#CE0E2D'},
-  {id:'eva', name:'EVA Air',        emoji:'🌏', cls:'eva', hex:'#00653A'},
-  {id:'jx',  name:'STARLUX Airlines', emoji:'✦', cls:'jx', hex:'#8D7249'}
+  {id:'cal', name:'China Airlines', emoji:'🌸', cls:'cal', hex:'#CE0E2D',
+   svg:'<svg viewBox="0 0 64 64"><path d="M6 38 L46 22 C54 19 58 22 56 26 L50 34 L20 44 L10 44 Z" fill="#CE0E2D"/><path d="M38 25 L34 12 L40 12 L48 22 Z" fill="#a30b24"/><path d="M18 41 L14 50 L20 50 L26 40 Z" fill="#a30b24"/><g transform="translate(47,13)"><circle r="6" fill="#fff"/><path d="M0-5 C2-2 2 2 0 5 C-2 2 -2-2 0-5 Z M-4.3-2.5 C-1.5-2 1.5 0 4.3 2.5 M-4.3 2.5 C-1.5 2 1.5-2 4.3-2.5" fill="none" stroke="#CE0E2D" stroke-width="1.5"/></g></svg>'},
+  {id:'eva', name:'EVA Air',        emoji:'🌏', cls:'eva', hex:'#00653A',
+   svg:'<svg viewBox="0 0 64 64"><path d="M6 38 L46 22 C54 19 58 22 56 26 L50 34 L20 44 L10 44 Z" fill="#00653A"/><path d="M38 25 L34 12 L40 12 L48 22 Z" fill="#F58220"/><path d="M18 41 L14 50 L20 50 L26 40 Z" fill="#F58220"/><circle cx="47" cy="13" r="6" fill="#fff"/><path d="M43 13 A4 4 0 0 1 51 13" fill="none" stroke="#00653A" stroke-width="2.2"/></svg>'},
+  {id:'jx',  name:'STARLUX Airlines', emoji:'✦', cls:'jx', hex:'#8D7249',
+   svg:'<svg viewBox="0 0 64 64"><path d="M6 38 L46 22 C54 19 58 22 56 26 L50 34 L20 44 L10 44 Z" fill="#2B2B2B"/><path d="M38 25 L34 12 L40 12 L48 22 Z" fill="#8D7249"/><path d="M18 41 L14 50 L20 50 L26 40 Z" fill="#8D7249"/><path d="M47 7 L48.6 11.4 L53 13 L48.6 14.6 L47 19 L45.4 14.6 L41 13 L45.4 11.4 Z" fill="#C9A96A"/></svg>'}
 ];
 
 /* Board: 32 spaces clockwise from Taipei Main Station (top-left corner) */
@@ -651,13 +666,31 @@ const BONUS_FACTS = [
  'Maokong’s hillside teahouses are a gondola ride from the Taipei metro.'
 ];
 
+/* ══════════ TRAVEL TOKENS — four OhBears ══════════
+   Placeholder art. When the real OhBear artwork arrives, add an `img` field to any
+   token (`img:'images/ohbear-explorer.png'` or a data-URI) and it renders instead
+   of the SVG — nothing else needs to change. Tokens are NOT tied to an airline. */
+const OB = accessory => '<svg viewBox="0 0 64 64">'
+ +'<circle cx="18" cy="15" r="8.5" fill="#3b332e"/><circle cx="46" cy="15" r="8.5" fill="#3b332e"/>'
+ +'<circle cx="18" cy="15" r="4.2" fill="#8a7364"/><circle cx="46" cy="15" r="4.2" fill="#8a7364"/>'
+ +'<circle cx="32" cy="34" r="22" fill="#3b332e"/>'
+ +'<path d="M22 44 Q32 30 42 44 Q32 52 22 44Z" fill="#f5efe8"/>'
+ +'<circle cx="25" cy="30" r="3.4" fill="#fff"/><circle cx="39" cy="30" r="3.4" fill="#fff"/>'
+ +'<circle cx="25.7" cy="30.6" r="1.7" fill="#1a1a1a"/><circle cx="39.7" cy="30.6" r="1.7" fill="#1a1a1a"/>'
+ +'<ellipse cx="32" cy="38" rx="4" ry="3" fill="#1a1a1a"/>'
+ +(accessory||'')+'</svg>';
 const TOKENS = [
- {id:'ohbear', name:'OhBear 🐻', svg:'<svg viewBox="0 0 64 64"><circle cx="18" cy="16" r="9" fill="#3b332e"/><circle cx="46" cy="16" r="9" fill="#3b332e"/><circle cx="18" cy="16" r="4.5" fill="#8a7364"/><circle cx="46" cy="16" r="4.5" fill="#8a7364"/><circle cx="32" cy="34" r="22" fill="#3b332e"/><path d="M22 44 Q32 30 42 44 Q32 52 22 44Z" fill="#f5efe8"/><circle cx="25" cy="30" r="3.4" fill="#fff"/><circle cx="39" cy="30" r="3.4" fill="#fff"/><circle cx="25.7" cy="30.6" r="1.7" fill="#1a1a1a"/><circle cx="39.7" cy="30.6" r="1.7" fill="#1a1a1a"/><ellipse cx="32" cy="38" rx="4" ry="3" fill="#1a1a1a"/></svg>'},
- {id:'twlogo', name:'Taiwan Logo', svg:'<svg viewBox="0 0 64 64"><path d="M30 6 C40 4 46 12 42 20 C48 22 50 30 44 36 L36 50 C33 56 28 58 26 52 L22 38 C16 34 16 24 22 20 C20 12 24 8 30 6 Z" fill="#ff5629"/><text x="32" y="61" font-size="11" font-weight="800" text-anchor="middle" fill="#ff5629" font-family="Montserrat,sans-serif">TAIWAN</text></svg>'},
- {id:'cal', name:'China Airlines', air:'cal', svg:'<svg viewBox="0 0 64 64"><path d="M6 38 L46 22 C54 19 58 22 56 26 L50 34 L20 44 L10 44 Z" fill="#CE0E2D"/><path d="M38 25 L34 12 L40 12 L48 22 Z" fill="#a30b24"/><path d="M18 41 L14 50 L20 50 L26 40 Z" fill="#a30b24"/><g transform="translate(47,13)"><circle r="6" fill="#fff"/><path d="M0-5 C2-2 2 2 0 5 C-2 2 -2-2 0-5 Z M-4.3-2.5 C-1.5-2 1.5 0 4.3 2.5 C1 3.5 -3 1 -4.3-2.5 Z M4.3-2.5 C1.5-2 -1.5 0 -4.3 2.5 C-1 3.5 3 1 4.3-2.5 Z" fill="#CE0E2D"/></g></svg>'},
- {id:'eva', name:'EVA Air', air:'eva', svg:'<svg viewBox="0 0 64 64"><path d="M6 38 L46 22 C54 19 58 22 56 26 L50 34 L20 44 L10 44 Z" fill="#00653A"/><path d="M38 25 L34 12 L40 12 L48 22 Z" fill="#F58220"/><path d="M18 41 L14 50 L20 50 L26 40 Z" fill="#F58220"/><circle cx="47" cy="13" r="6" fill="#fff"/><path d="M43 13 A4 4 0 0 1 51 13" fill="none" stroke="#00653A" stroke-width="2.2"/></svg>'},
- {id:'jx', name:'STARLUX Airlines', air:'jx', svg:'<svg viewBox="0 0 64 64"><path d="M6 38 L46 22 C54 19 58 22 56 26 L50 34 L20 44 L10 44 Z" fill="#2B2B2B"/><path d="M38 25 L34 12 L40 12 L48 22 Z" fill="#8D7249"/><path d="M18 41 L14 50 L20 50 L26 40 Z" fill="#8D7249"/><path d="M47 7 L48.6 11.4 L53 13 L48.6 14.6 L47 19 L45.4 14.6 L41 13 L45.4 11.4 Z" fill="#C9A96A"/></svg>'}
+ {id:'ob_classic',  name:'OhBear',
+  svg:OB('<path d="M20 48 Q32 55 44 48 L45.5 52.5 Q32 60 18.5 52.5 Z" fill="#e2542c"/><path d="M41.5 51.5 l5.5 1.4 -1.8 8.6 -5.4-1.6 Z" fill="#c8452e"/>')},
+ {id:'ob_explorer', name:'OhBear the Explorer',
+  svg:OB('<ellipse cx="32" cy="16.5" rx="19" ry="4.2" fill="#b08b52"/><path d="M22 16.5 Q23 4.5 32 4.5 Q41 4.5 42 16.5 Z" fill="#c99e5f"/><rect x="22" y="12.6" width="20" height="3.4" fill="#7a5f36"/>')},
+ {id:'ob_surfer',   name:'OhBear the Surfer',
+  svg:OB('<path d="M13 22.5 Q32 14 51 22.5 L50 26 Q32 18 14 26 Z" fill="#2e8fbf"/><rect x="19.5" y="26.5" width="11" height="7.6" rx="3.2" fill="#1b2a3a"/><rect x="33.5" y="26.5" width="11" height="7.6" rx="3.2" fill="#1b2a3a"/><rect x="30" y="29" width="4" height="2.2" fill="#1b2a3a"/>')},
+ {id:'ob_foodie',   name:'OhBear the Foodie',
+  svg:OB('<g transform="translate(41.5,36)"><rect x="6" y="-9" width="2.2" height="9" fill="#e05a4a"/><path d="M0 0 h11.5 l-1.6 16 h-8.3 Z" fill="#f2e7d5"/><path d="M.8 6.5 h9.9 l-1 9.5 h-7.9 Z" fill="#c89a6b"/><circle cx="3.6" cy="13.4" r="1.3" fill="#3b2a1c"/><circle cx="7.2" cy="14" r="1.3" fill="#3b2a1c"/><rect x="-1.2" y="-2.4" width="14" height="2.8" rx="1.4" fill="#e05a4a"/></g>')}
 ];
+const tokenArt = t => t.img ? `<img class="tok-img" src="${t.img}" alt="${t.name}">` : t.svg;
+
 
 /* entry tiers */
 const TIERS = [
@@ -687,12 +720,14 @@ const REGION_SETS = {
 };
 function s_region(i){ return /dest/.test(SPACES[i].t) ? SPACES[i].region : null; }
 
-let S = {name:'', email:'', token:null, pos:0, lap:1, collected:[], tiers:['checkin'], pass:false, factIdx:0, started:false};
+let S = {name:'', email:'', token:null, airline:null, pos:0, lap:1, collected:[], tiers:['checkin'], pass:false, factIdx:0, started:false};
 function save(){ try{ localStorage.setItem('ttaRally', JSON.stringify(S)); }catch(e){} }
 function load(){ try{ const d=JSON.parse(localStorage.getItem('ttaRally')); if(d && d.started) S=d; }catch(e){} }
 const got = i => S.collected.includes(i);
 const entries = () => TIERS.filter(t=>S.tiers.includes(t.id)).reduce((s,t)=>s+t.pts,0);
-const airline = () => { const tk=TOKENS.find(t=>t.id===S.token); if(tk&&tk.air) return AIRLINES.find(a=>a.id===tk.air); return AIRLINES[(S.lap-1)%3]; };
+/* the airline the player chose at check-in — the one that flew them SFO → TPE */
+const airline = () => AIRLINES.find(a=>a.id===S.airline) || AIRLINES[0];
+const token = () => TOKENS.find(t=>t.id===S.token) || TOKENS[0];
 
 /* ══════════ BOARD RENDER — square grid + real Taiwan map ══════════ */
 const boardEl = document.getElementById('board');
@@ -978,8 +1013,7 @@ function refreshBoard(){
     el.classList.toggle('got', got(i));
     const old=el.querySelector('.pin'); if(old) old.remove();
     if(i===S.pos && S.started){
-      const tk=TOKENS.find(t=>t.id===S.token)||TOKENS[0];
-      const pin=document.createElement('div'); pin.className='pin'; pin.innerHTML=tk.svg;
+      const pin=document.createElement('div'); pin.className='pin'; pin.innerHTML=tokenArt(token());
       el.appendChild(pin);
     }
   });
@@ -1022,10 +1056,10 @@ function imgBlock(sp){ return `<div class="md-img">${regionTag(sp)}${sp.ico}<spa
 
 /* ══════════ FLIGHT INTRO (SFO → TPE) ══════════ */
 function playFlightIntro(after){
-  const al=airline();
-  const tk=TOKENS.find(t=>t.id===S.token)||TOKENS[0];
-  const planeArt=(tk.air?tk:TOKENS.find(t=>t.id==='cal')).svg
-    .replace('<svg viewBox="0 0 64 64">','').replace('</svg>','');
+  const al=airline(), tk=token();
+  const strip=s=>s.replace('<svg viewBox="0 0 64 64">','').replace('</svg>','');
+  const planeArt=strip(al.svg);
+  const bearArt=strip(tk.svg||'');
   /* scene 640×300 — Taiwan lower-left, the American west coast right */
   const sc=.82, ox=56, oy=118;
   const tpe=[ox+60.9*sc, oy+12.1*sc];
@@ -1095,11 +1129,11 @@ function playFlightIntro(after){
         <!-- route + plane -->
         <path id="fiRoute" d="M ${sfo[0]},${sfo[1]} C 462,-4 252,14 ${tpe[0]},${tpe[1]}" fill="none" stroke="#8a6f4d" stroke-width="2.4" stroke-dasharray="6 7" stroke-linecap="round"/>
         <text x="330" y="252" text-anchor="middle" font-size="10" fill="#8a7757" opacity=".7" font-family="Oswald,serif" letter-spacing="2.2">6,455 MILES · ABOUT 13 HOURS</text>
-        <g id="fiPlane" opacity="0"><g transform="translate(-19,-19) scale(0.6)"><g transform="scale(-1,1) translate(-64,0)">${planeArt}</g></g></g>
+        <g id="fiPlane" opacity="0"><g transform="translate(-19,-19) scale(0.6)"><g transform="scale(-1,1) translate(-64,0)">${planeArt}</g></g><g transform="translate(-11,-22.5) scale(0.27)">${bearArt}</g></g>
       </g>
     </svg>
     <div class="fi-strip">
-      <span class="t1">✈ Now boarding · <span style="color:${al.hex}">${al.name}</span> → Taipei</span>
+      <span class="t1">✈ ${tk.name} flies <span style="color:${al.hex}">${al.name}</span> · San Francisco → Taipei</span>
       <span class="t2">tap to skip</span>
     </div>
   </div>`;
@@ -1139,9 +1173,16 @@ function playFlightIntro(after){
 function initCheckin(){
   const tw=document.getElementById('tokens');
   TOKENS.forEach(t=>{
-    const b=document.createElement('div'); b.className='tok'; b.innerHTML=t.svg+`<span>${t.name}</span>`;
-    b.onclick=()=>{ document.querySelectorAll('.tok').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.token=t.id; };
+    const b=document.createElement('div'); b.className='tok'; b.innerHTML=tokenArt(t)+`<span>${t.name}</span>`;
+    b.onclick=()=>{ tw.querySelectorAll('.tok').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.token=t.id; };
     tw.appendChild(b);
+  });
+  const aw=document.getElementById('airlines');
+  AIRLINES.forEach(a=>{
+    const b=document.createElement('div'); b.className='tok'; b.style.setProperty('--al',a.hex);
+    b.innerHTML=a.svg+`<span>${a.name}</span>`;
+    b.onclick=()=>{ aw.querySelectorAll('.tok').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.airline=a.id; };
+    aw.appendChild(b);
   });
   document.getElementById('ckStart').onclick=()=>{
     S.name=document.getElementById('ckName').value.trim()||'Traveler';
@@ -1150,16 +1191,17 @@ function initCheckin(){
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(S.email)){ toast('Please enter a valid email — it\'s your sweepstakes entry 🎟️'); return; }
       if(!document.getElementById('ckConsent').checked){ toast('Please agree to the Official Rules to enter.'); return; }
     }
-    if(!S.token){ toast('Pick a travel token to board ✈️'); return; }
+    if(!S.token){ toast('Pick an OhBear to travel with 🐻'); return; }
+    if(!S.airline){ toast('Pick the airline that flies you to Taipei ✈️'); return; }
     S.started=true;
-    apiRegister(); track('game_checkin',{token:S.token});
+    apiRegister(); track('game_checkin',{token:S.token,airline:S.airline});
     document.getElementById('checkin').classList.add('hidden');
     document.getElementById('game').classList.remove('hidden');
     refreshBoard();
     requestAnimationFrame(drawLinks);
     playFlightIntro(()=>{
       toast(`🎟️ Checked in — you're in the draw! Every milestone from here is a bonus.`);
-      setStatus(`Touchdown at Taoyuan, <b>${S.name}</b>! The Airport MRT drops you at Taipei Main Station — roll to start exploring.`);
+      setStatus(`Touchdown at Taoyuan with ${airline().name}, <b>${S.name}</b>! The Airport MRT drops you at Taipei Main Station — roll to start exploring.`);
     });
   };
 }
@@ -1202,21 +1244,13 @@ function onLap(after){
   S.lap++;
   track('lap_complete',{lap:S.lap}); apiProgress();
   const firstLap=!S.tiers.includes('lap1');
-  const al=airline();
   maybeGrantPass();
-  const m=openModal(`
-    <div class="md-body" style="padding-top:26px">
-      <div class="bp-lap">✦ Now boarding ✦</div>
-      <span class="bp-airline" style="background:${al.hex}">${al.emoji} ${al.name}</span>
-      <h2>Lap ${S.lap} — around the island again!</h2>
-      <div class="gate-row"><span>From<b>TPE</b></span><span>Flight<b>RTR-${String(S.lap).padStart(2,'0')}</b></span><span>Gate<b>TW${S.lap+8}</b></span></div>
-      <p class="fact">${firstLap?'First lap complete — that\'s a bonus entry! 🎟️':'Plenty of island left to stamp — destinations you already visited still share bonus facts.'}</p>
-    </div>
-    <div class="md-foot"><button class="btn btn-g" id="lapGo">Keep exploring</button></div>`,'boarding');
-  m.dataset.lock='1';
-  m.querySelector('#lapGo').onclick=()=>{ closeModal(m); after&&after(); };
-  award('lap1');
+  award('lap1');            // first lap fires its own bonus-entry toast + confetti
   refreshBoard();
+  /* No boarding pass here — the flight already happened at check-in. Passing 00 is
+     simply rolling back through Taipei Main Station, and the hub offer follows. */
+  if(!firstLap) toast(`🚉 Lap ${S.lap} — back through Taipei Main Station`, 2000);
+  after&&after();
 }
 /* ══════════ TAIPEI MAIN STATION — the island hub ══════════ */
 function hubPicks(n=3){
@@ -1471,7 +1505,7 @@ document.getElementById('tpeGate').onclick=()=>{
       <p class="fact">Taoyuan International is Taiwan's gateway to the world — China Airlines, EVA Air and STARLUX Airlines all fly nonstop from San Francisco to TPE in about 13 hours. You landed here; the Airport MRT runs straight into Taipei Main Station, where your journey around the island begins.</p>
       <p class="fact">${done
         ? `Your boarding pass is issued — ${n} stamps collected. Whenever you're ready, this is the gate you fly home from. 🎫`
-        : `${n} of ${TOTAL_COLLECT} stamps so far. Fill ${PASS_THRESHOLD} and a partner airline issues your boarding pass right here.`}</p>
+        : `${n} of ${TOTAL_COLLECT} stamps so far. Fill ${PASS_THRESHOLD} and ${airline().name} issues your boarding pass right here.`}</p>
     </div>
     <div class="md-foot"><button class="btn" onclick="this.closest('.mask').remove()">Back to the rally</button></div>`);
 };
@@ -1483,6 +1517,7 @@ document.getElementById('lnkHow').onclick=()=>openModal(`
     <h2>Round Taiwan Rally</h2>
     <p class="fact">
     🎟️ <b>You're already entered</b> — checking in gave you your first entry in the flight ticket draw.<br><br>
+    ✈️ <b>${token().name}</b> flew <b>${airline().name}</b> from San Francisco to Taipei and landed at TPE. The Airport MRT dropped you at Taipei Main Station — that's where the rally begins.<br>
     🎲 <b>Roll</b> to travel clockwise around Taiwan.<br>
     📖 Land on a destination, learn something real about it, then <b>answer 1 question</b> to stamp it into your passport.<br>
     🚉 <b>Taipei Main Station</b> is the corner you start from and pass every lap. Every time you pass it, it offers you a <b>free ride to one of three places you haven't reached yet</b> — take it, or stay on the space your dice earned you.<br>
