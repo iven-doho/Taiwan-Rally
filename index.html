@@ -107,6 +107,11 @@ button{font-family:var(--font);}
 .tpe-gate .tg-t{display:flex;flex-direction:column;line-height:1.18;}
 .tpe-gate .tg-k{font-size:7.5px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#9b8a72;}
 .tpe-gate .tg-n{font-size:10.5px;font-weight:800;color:#4a3f31;letter-spacing:.02em;}
+/* OhBear waiting in the arrivals hall, before the very first roll */
+.apt-pin{position:absolute;left:20px;top:46px;z-index:5;width:clamp(24px,3.4vw,36px);height:clamp(24px,3.4vw,36px);display:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.28));animation:aptBob 2.4s ease-in-out infinite;}
+.apt-pin.on{display:block;}
+.apt-pin svg,.apt-pin .tok-img{width:100%;height:100%;object-fit:contain;}
+@keyframes aptBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .tpe-gate.ready{border-color:#b25a1f;background:linear-gradient(150deg,#fff7ec,#ffe9d2);}
 .tpe-gate.ready .tg-k{color:#b25a1f;}
 #twmap{height:100%;width:auto;max-width:100%;overflow:visible;}
@@ -145,6 +150,7 @@ button{font-family:var(--font);}
   .map-zone{padding:4% 3%;}
   .tpe-gate{left:6px;top:6px;padding:5px 9px 5px 7px;gap:6px;}
   .tpe-gate .tg-ico{font-size:15px;} .tpe-gate .tg-n{font-size:8.5px;} .tpe-gate .tg-k{font-size:6px;}
+  .apt-pin{left:15px;top:38px;width:26px;height:26px;}
   .sp .ico{font-size:15px;margin-top:2%;}
   .sp .nm{font-size:6.6px;line-height:1.08;padding:1px 1px 0;}
   .sp .num{font-size:6px;top:1px;left:3px;}
@@ -332,6 +338,7 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;o
           <span class="tg-ico">✈️</span>
           <span class="tg-t"><span class="tg-k" id="tgKick">Arrivals</span><span class="tg-n">TPE Airport</span></span>
         </div>
+        <div class="apt-pin" id="aptPin"></div>
         <div class="map-zone"><svg id="twmap" preserveAspectRatio="xMidYMid meet"></svg></div>
         <div class="cn-panel">
           <div class="cn-logo">Round Taiwan Rally</div>
@@ -340,7 +347,7 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;o
             <div class="dice"><div class="die" id="d1" data-v="3"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
             <button class="roll-btn" id="rollBtn">ROLL 🎲</button>
           </div>
-          <div class="cn-status" id="status">Welcome aboard! You've landed at TPE — roll to start from Taipei Main Station.</div>
+          <div class="cn-status" id="status">Welcome aboard! You've landed at TPE — roll to ride the Airport MRT into Taipei Main Station.</div>
           <div class="cn-prog"><div class="lbl"><span>Passport</span><span id="progTxt">0 / 29</span></div><div class="pt"><div class="pf" id="progFill" style="width:0%"></div></div></div>
           <div class="cn-links"><a id="lnkPassport">My Passport</a><a id="lnkHow">How to play</a><a id="lnkReset" style="opacity:.6">Reset</a></div>
         </div>
@@ -720,7 +727,9 @@ const REGION_SETS = {
 };
 function s_region(i){ return /dest/.test(SPACES[i].t) ? SPACES[i].region : null; }
 
-let S = {name:'', email:'', token:null, airline:null, pos:0, lap:1, collected:[], tiers:['checkin'], pass:false, factIdx:0, started:false};
+/* atAirport: OhBear has landed at TPE but hasn't taken the Airport MRT into
+   Taipei Main Station yet. True only until the very first roll. */
+let S = {name:'', email:'', token:null, airline:null, pos:0, lap:1, collected:[], tiers:['checkin'], pass:false, factIdx:0, started:false, atAirport:false};
 function save(){ try{ localStorage.setItem('ttaRally', JSON.stringify(S)); }catch(e){} }
 function load(){ try{ const d=JSON.parse(localStorage.getItem('ttaRally')); if(d && d.started) S=d; }catch(e){} }
 const got = i => S.collected.includes(i);
@@ -1012,7 +1021,7 @@ function refreshBoard(){
     const el=document.getElementById('sp'+i);
     el.classList.toggle('got', got(i));
     const old=el.querySelector('.pin'); if(old) old.remove();
-    if(i===S.pos && S.started){
+    if(i===S.pos && S.started && !S.atAirport){
       const pin=document.createElement('div'); pin.className='pin'; pin.innerHTML=tokenArt(token());
       el.appendChild(pin);
     }
@@ -1023,6 +1032,8 @@ function refreshBoard(){
   document.getElementById('chipPass').classList.toggle('hidden', !S.pass);
   const tg=document.getElementById('tpeGate');
   if(tg){ tg.classList.toggle('ready', !!S.pass); document.getElementById('tgKick').textContent=S.pass?'Departures':'Arrivals'; }
+  const ap=document.getElementById('aptPin');
+  if(ap){ const here=S.started&&S.atAirport; ap.classList.toggle('on',here); ap.innerHTML=here?tokenArt(token()):''; }
   document.getElementById('progTxt').textContent=`${S.collected.length} / ${TOTAL_COLLECT}`;
   document.getElementById('progFill').style.width=(S.collected.length/TOTAL_COLLECT*100)+'%';
   paintLinks();
@@ -1193,7 +1204,7 @@ function initCheckin(){
     }
     if(!S.token){ toast('Pick an OhBear to travel with 🐻'); return; }
     if(!S.airline){ toast('Pick the airline that flies you to Taipei ✈️'); return; }
-    S.started=true;
+    S.started=true; S.atAirport=true; S.pos=0;
     apiRegister(); track('game_checkin',{token:S.token,airline:S.airline});
     document.getElementById('checkin').classList.add('hidden');
     document.getElementById('game').classList.remove('hidden');
@@ -1201,7 +1212,7 @@ function initCheckin(){
     requestAnimationFrame(drawLinks);
     playFlightIntro(()=>{
       toast(`🎟️ Checked in — you're in the draw! Every milestone from here is a bonus.`);
-      setStatus(`Touchdown at Taoyuan with ${airline().name}, <b>${S.name}</b>! The Airport MRT drops you at Taipei Main Station — roll to start exploring.`);
+      setStatus(`Landed at TPE with ${airline().name}, <b>${S.name}</b> — <b>roll</b> to ride the Airport MRT into Taipei Main Station.`);
     });
   };
 }
@@ -1226,6 +1237,17 @@ function roll(){
   },70);
 }
 function moveBy(n){
+  /* Very first roll of the game: OhBear rides the Airport MRT in from TPE and
+     touches down on Taipei Main Station before the dice steps begin. */
+  if(S.atAirport){
+    S.atAirport=false; S.pos=0; refreshBoard(); save();
+    toast('🚈 Airport MRT — TPE to Taipei Main Station', 2200);
+    setTimeout(()=>stepBy(n), 620);
+    return;
+  }
+  stepBy(n);
+}
+function stepBy(n){
   let steps=0, crossed=false;
   const iv=setInterval(()=>{
     S.pos=(S.pos+1)%32; steps++;
@@ -1517,7 +1539,7 @@ document.getElementById('lnkHow').onclick=()=>openModal(`
     <h2>Round Taiwan Rally</h2>
     <p class="fact">
     🎟️ <b>You're already entered</b> — checking in gave you your first entry in the flight ticket draw.<br><br>
-    ✈️ <b>${token().name}</b> flew <b>${airline().name}</b> from San Francisco to Taipei and landed at TPE. The Airport MRT dropped you at Taipei Main Station — that's where the rally begins.<br>
+    ✈️ <b>${token().name}</b> flew <b>${airline().name}</b> from San Francisco to Taipei and landed at <b>TPE</b> — the airport card in the middle of the board. Your first roll rides the Airport MRT into Taipei Main Station, where the rally begins.<br>
     🎲 <b>Roll</b> to travel clockwise around Taiwan.<br>
     📖 Land on a destination, learn something real about it, then <b>answer 1 question</b> to stamp it into your passport.<br>
     🚉 <b>Taipei Main Station</b> is the corner you start from and pass every lap. Every time you pass it, it offers you a <b>free ride to one of three places you haven't reached yet</b> — take it, or stay on the space your dice earned you.<br>
