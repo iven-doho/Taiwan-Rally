@@ -1352,19 +1352,26 @@ function moveBy(n){
   }
   stepBy(n);
 }
+/* The token really does pull in to Taipei Main Station. If a roll would carry it over
+   space 01 the walk halts there, mid-move, and the interchange opens with the token
+   standing on the platform — turning down the trains then rides out the steps the dice
+   still owed. A roll that ends exactly on 01 has nothing left to ride out. */
 function stepBy(n){
-  let steps=0, crossed=false;
+  let steps=0;
   const iv=setInterval(()=>{
     S.pos=(S.pos+1)%32; steps++;
-    if(S.pos===0) crossed=true;
     refreshBoard();
-    if(steps>=n){ clearInterval(iv);
-      const finish=()=>{ maybeGrantPass(); busy=false; };
-      const landHere=()=>{ resolveSpace(S.pos, ()=>{ offerDetour(S.pos, finish); }); };
-      if(S.pos===0){ onLap(()=>{ hubOffer(landHere, finish, true); }); }
-      else if(crossed){ onLap(()=>{ hubOffer(landHere, finish, false); }); }
-      else{ landHere(); }
-    }
+    const atHub=S.pos===0, done=steps>=n;
+    if(!atHub && !done) return;
+    clearInterval(iv);
+    const finish=()=>{ maybeGrantPass(); busy=false; };
+    const landHere=()=>{ resolveSpace(S.pos, ()=>{ offerDetour(S.pos, finish); }); };
+    if(!atHub){ landHere(); return; }
+    /* Standing on index 0, so the space the dice were pointing at is simply the number
+       of steps still owed — at most five, which can never wrap back past the hub. */
+    const left=n-steps;
+    const pend=left>0?{left,dest:left}:null;
+    onLap(()=>{ hubOffer(()=>stepBy(left), finish, pend); });
   },420);
 }
 function onLap(after){
@@ -1374,9 +1381,10 @@ function onLap(after){
   maybeGrantPass();
   award('lap1');            // first lap fires its own bonus-entry toast + confetti
   refreshBoard();
-  /* No boarding pass here — the flight already happened at check-in. Passing 00 is
-     simply rolling back through Taipei Main Station, and the hub offer follows. */
-  if(!firstLap) toast(`🚉 Lap ${S.lap} — back through Taipei Main Station`, 2000);
+  /* No boarding pass here — the flight already happened at check-in. The token has just
+     pulled in to Taipei Main Station and is standing on the platform; the hub offer
+     follows, and only turning the trains down sends it back out onto the board. */
+  if(!firstLap) toast(`🚉 Lap ${S.lap} — pulling in to Taipei Main Station`, 2000);
   after&&after();
 }
 /* ══════════ TAIPEI MAIN STATION — the island hub ══════════
@@ -1408,11 +1416,14 @@ const LINES = {
 const lineOpen = k => LINES[k].stops.filter(i=>!got(i));
 
 /* Step one of the interchange: which train? */
-function hubOffer(onDecline, onDone, landed){
-  const stay=()=>{ landed?onDone():onDecline(); };
+/* `pend` is what the dice still owe: {left, dest} when the roll was interrupted here, or
+   null when it ended on the station. Declining rides the remainder out; there is nothing
+   to ride out in the null case, so declining simply ends the turn. */
+function hubOffer(onDecline, onDone, pend){
+  const stay=()=>{ pend?onDecline():onDone(); };
   const keys=Object.keys(LINES).filter(k=>lineOpen(k).length);
   if(!keys.length){ stay(); return; }        // passport full on both lines — nothing to offer
-  const stayTxt=landed?'Stay here — keep rolling':`Stay on your roll — ${SPACES[S.pos].name}`;
+  const stayTxt=declineTxt(pend), staySub=declineSub(pend);
   const rows=keys.map(k=>{ const L=LINES[k], n=lineOpen(k).length;
     return `<button class="op op-line" data-k="${k}" style="border-color:${L.hex}44">
       <span class="lb" style="background:${L.hex};color:#fff">${L.ico}</span>
@@ -1422,22 +1433,26 @@ function hubOffer(onDecline, onDone, landed){
   const m=openModal(`
     <div class="md-body"><span class="kick" style="border-color:#b25a1f;color:#b25a1f">🚉 Taipei Main Station · 台北車站</span>
     <h2>Change trains?</h2>
-    <p class="fact">Every line on the island meets under this one roof. Your rail pass is good for a free ride each time you come through — pick a line, then pick a stop you haven't collected yet. Or ignore the timetable and stay on your roll.</p>
+    <p class="fact">Your train has pulled in, and every line on the island meets under this one roof. Your rail pass is good for a free ride each time you come through — pick a line, then pick a stop you haven't collected yet. Or wave the timetable off and finish the move the dice gave you.</p>
     <div class="ops">${rows}
-    <button class="op" data-k="-"><span class="lb">🎲</span><span class="op-tx"><b>${stayTxt}</b><span class="op-sub">Let the dice decide where you land.</span></span></button></div></div>
+    <button class="op" data-k="-"><span class="lb">🎲</span><span class="op-tx"><b>${stayTxt}</b><span class="op-sub">${staySub}</span></span></button></div></div>
     <div style="height:18px"></div>`);
   m.dataset.lock='1';
   m.querySelectorAll('.op').forEach(b=>b.onclick=()=>{
     const k=b.dataset.k; closeModal(m);
     if(k==='-'){ track('hub_decline',{}); stay(); }
-    else hubBoard(k, onDecline, onDone, landed);
+    else hubBoard(k, onDecline, onDone, pend);
   });
 }
+/* The way out of the interchange is worded from where the token actually is — standing on
+   the platform — so it names the space the dice were pointing at, not the station. */
+const declineTxt = pend => pend?`Carry on to ${SPACES[pend.dest].name}`:'Stay here — keep rolling';
+const declineSub = pend => pend?`The dice still owe you ${pend.left} space${pend.left===1?'':'s'} — ride them out.`:'Take your next turn from the station.';
 
 /* Step two: every stop on the chosen line the player still hasn't been to. */
-function hubBoard(k, onDecline, onDone, landed){
+function hubBoard(k, onDecline, onDone, pend){
   const L=LINES[k], open=lineOpen(k);
-  const stay=()=>{ landed?onDone():onDecline(); };
+  const stay=()=>{ pend?onDecline():onDone(); };
   const rows=open.map(x=>`<button class="op" data-to="${x}">
       <span class="lb" style="background:${REGIONS[SPACES[x].region].hex};color:#fff">${SPACES[x].ico}</span>
       <span class="op-tx"><b>${SPACES[x].name}</b><span class="op-sub">${spNum(x)} · ${REGIONS[SPACES[x].region].name}</span></span></button>`).join('');
@@ -1448,13 +1463,13 @@ function hubBoard(k, onDecline, onDone, landed){
     <div class="ops scroll">${rows}</div>
     <div class="ops" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
       <button class="op" data-to="-2"><span class="lb">🚉</span><span class="op-tx"><b>Back to the concourse</b><span class="op-sub">Pick the other line instead.</span></span></button>
-      <button class="op" data-to="-1"><span class="lb">🎲</span><span class="op-tx"><b>${landed?'Stay here — keep rolling':'Stay on your roll — '+SPACES[S.pos].name}</b></span></button>
+      <button class="op" data-to="-1"><span class="lb">🎲</span><span class="op-tx"><b>${declineTxt(pend)}</b><span class="op-sub">${declineSub(pend)}</span></span></button>
     </div></div>
     <div style="height:18px"></div>`);
   m.dataset.lock='1';
   m.querySelectorAll('.op').forEach(b=>b.onclick=()=>{
     const to=+b.dataset.to; closeModal(m);
-    if(to===-2){ hubOffer(onDecline, onDone, landed); return; }
+    if(to===-2){ hubOffer(onDecline, onDone, pend); return; }
     if(to===-1){ track('hub_decline',{line:k}); stay(); return; }
     S.pos=to; refreshBoard();
     track('hub_ride',{line:k, destination:SPACES[to].name});
@@ -1690,7 +1705,7 @@ document.getElementById('lnkHow').onclick=()=>openModal(`
     ✈️ <b>${token().name}</b> flew <b>${airline().name}</b> from San Francisco to Taipei and landed at <b>TPE</b> — the airport card in the middle of the board. Your first roll rides the Airport MRT into Taipei Main Station, where the rally begins.<br>
     🎲 <b>Roll</b> to travel clockwise around Taiwan.<br>
     📖 Land on a destination, learn something real about it, then <b>answer 1 question</b> to stamp it into your passport.<br>
-    🚉 <b>Taipei Main Station (space 01)</b> is the corner you start from and cross every lap. Reach it or pass it and the trains stop for you: choose the <b>High Speed Rail</b> down the west coast or the <b>TRA round-island line</b> that reaches the east, then ride free to any stop on that line you haven't collected — or wave it off and stay on the space your dice earned you.<br>
+    🚉 <b>Taipei Main Station (space 01)</b> is the corner you start from and come back through every lap. If your roll would carry you over it, <b>you stop there</b> — the token pulls in to the platform and the trains are waiting: choose the <b>High Speed Rail</b> down the west coast or the <b>TRA round-island line</b> that reaches the east, then ride free to any stop on that line you haven't collected. Wave the timetable off instead and you carry on to the space your dice were pointing at.<br>
     🚄 <b>Two branch lines</b>: the High Speed Rail down the west coast and the Coastal Railway down the east. Land on either and it stamps instantly, plus a free hop to any stop on that line.<br>
     🚌 <b>Scenic detours</b>: some stops offer a side trip inland — hidden mountain and valley destinations for your passport.<br>
     🎟️ <b>Bonus entries</b>: first lap, each region set, both railways, all 5 detours, 50%, and the full island (max ${MAX_ENTRIES}).<br>
