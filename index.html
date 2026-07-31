@@ -76,6 +76,11 @@ body.playing .wrap{max-width:1460px;}
 .btn-g{background:var(--green);box-shadow:0 4px 16px rgba(34,197,94,.3);}
 .btn-ghost{background:#fff;color:var(--brand);border:2px solid var(--brand);box-shadow:none;}
 .ck-fine{text-align:center;font-size:11px;color:var(--text-light);margin-top:12px;line-height:1.6;}
+/* Shown in place of the form before a campaign opens or after it closes. */
+.ck-closed{text-align:center;padding:28px 20px;border:2px dashed var(--border);border-radius:var(--radius-md);background:rgba(255,255,255,.5);}
+.ck-closed h3{font-family:var(--font-disp),sans-serif;font-size:20px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px;color:var(--text-mid);}
+.ck-closed p{font-size:14px;line-height:1.7;color:var(--text-mid);max-width:34em;margin:0 auto;}
+.ck-closed .ck-fine{margin-top:14px;}
 
 /* ── GAME HEADER ── */
 .ghead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
@@ -387,7 +392,7 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;o
   <div class="ck-head">
     <div class="kicker">Taiwan — Waves of Wonder</div>
     <h1>Round Taiwan Rally</h1>
-    <p>Roll the dice and travel around the island. Collect destinations, learn what makes Taiwan unforgettable, and earn bonus entries toward <strong>3 round-trip flight tickets to Taiwan</strong> — plus smaller gifts along the way.</p>
+    <p>Roll the dice and travel around the island. Collect destinations, learn what makes Taiwan unforgettable, and earn bonus entries toward <strong data-prize></strong> — plus smaller gifts along the way.</p>
   </div>
   <div class="ck-cards">
     <div class="card"><span class="n">1</span><h3>Check in = you're entered</h3><p>Registering gives you your first sweepstakes entry. No play required.</p></div>
@@ -397,9 +402,10 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;o
   <div class="ck-form">
     <div class="fg"><label>Name</label><input id="ckName" type="text" placeholder="Your name" maxlength="40"></div>
     <div class="fg"><label>Email</label><input id="ckEmail" type="email" placeholder="you@email.com" maxlength="80"></div>
+    <div class="fg hidden" id="ckCodeRow"><label>Event code</label><input id="ckCode" type="text" placeholder="Ask our booth staff" maxlength="24" autocapitalize="characters"></div>
     <label class="form-checkbox" style="font-size:12.5px;color:var(--text-mid);display:flex;gap:8px;align-items:flex-start;margin:2px 0 6px;cursor:pointer;">
       <input type="checkbox" id="ckConsent" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">
-      <span>I agree to the <a href="#" onclick="return false">Official Rules</a> and to receive sweepstakes-related email. No purchase necessary.</span>
+      <span>I agree to the <a id="ckRules" href="#" onclick="return false">Official Rules</a> and to receive sweepstakes-related email. No purchase necessary.</span>
     </label>
     <div class="tok-label">Choose your OhBear</div>
     <div class="tokens" id="tokens"></div>
@@ -470,11 +476,48 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;o
    See DEPLOYMENT.md for the Supabase schema and setup steps. */
 const CONFIG = {
   backend: 'local',
-  supabaseUrl: 'https://YOUR-PROJECT.supabase.co',
-  supabaseAnonKey: 'YOUR-ANON-KEY',
+
+  /* ── The sweepstakes this build belongs to ──────────────────────────────
+     Every run of the game is its own sweepstakes with its own prize pool, and the two must
+     never share a ledger: the three tickets promised to a two-day travel show cannot be
+     drawn from a pool that also contains two months of online play. `campaign` is the id
+     that keeps them apart. It scopes the saved passport, every row written to Supabase and
+     every GA4 event, so a draw is a single filter and an export can never mix two prizes.
+     Change it for every run. Short slug plus year: 'mega-2027', 'travelshow-sf-2027'. */
+  campaign: 'demo',
+  campaignName: 'Round Taiwan Rally',
+  /* Prize wording is per campaign because the pools differ. Used wherever the game names
+     what is being played for, so a re-skin never leaves last campaign's prize in the copy. */
+  prize: '3 round-trip flight tickets to Taiwan',
+  prizeShort: 'a round-trip flight to Taiwan',
+  rulesUrl: '',                                 // Official Rules for THIS sweepstakes
+
+  /* The entry window as 'YYYY-MM-DDTHH:MM' in the player's own clock; '' means always open
+     (demos and partner previews). Outside it the check-in form is replaced by a notice.
+     This is only the client half of the fence — a leaked URL is stopped for good by the
+     matching Supabase policy in DEPLOYMENT.md, which refuses writes outside the window. */
+  opens: '',
+  closes: '',
+  /* On-site events only: a word handed out at the booth, checked case-insensitively. It
+     keeps the show-floor prize pool from filling up with people who were never at the show.
+     Anyone can read it in the page source, so treat it as friction rather than security —
+     the server-side window is the part that actually protects the pool. */
+  accessCode: '',
+
   gaId: '',                                     // e.g. 'G-1KFW5EHHT4' — enables GA4 with cross-domain linking
   gaLinkDomains: ['feeltaiwan.com','game.feeltaiwan.com']
 };
+/* Open/closed is read once at load: a player who checked in inside the window keeps playing
+   to the end of their session even if the clock rolls past the close, which is the humane
+   behaviour at a booth about to shut. Only new check-ins are refused. */
+const campaignOpen = (() => {
+  const now = Date.now();
+  const t = s => { const d = new Date(s); return isNaN(d) ? null : d.getTime(); };
+  const o = CONFIG.opens ? t(CONFIG.opens) : null, c = CONFIG.closes ? t(CONFIG.closes) : null;
+  if (o !== null && now < o) return 'early';
+  if (c !== null && now >= c) return 'over';
+  return 'open';
+})();
 /* ── GA4 (cross-domain) ── */
 if(CONFIG.gaId){
   const s=document.createElement('script'); s.async=true;
@@ -485,7 +528,9 @@ if(CONFIG.gaId){
   gtag('js',new Date());
   gtag('config',CONFIG.gaId,{linker:{domains:CONFIG.gaLinkDomains}});
 }
-function track(ev,params){ try{ if(window.gtag) gtag('event',ev,params||{}); }catch(e){} }
+/* Every event carries its campaign, so one GA4 property reports the travel show weekend and
+   the annual campaign separately without needing a second property or a date-range guess. */
+function track(ev,params){ try{ if(window.gtag) gtag('event',ev,Object.assign({campaign:CONFIG.campaign},params||{})); }catch(e){} }
 function getUTM(){
   const u={}, q=new URLSearchParams(location.search);
   for(const k of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term']) if(q.get(k)) u[k]=q.get(k);
@@ -503,18 +548,21 @@ async function sb(path, body, prefer){
     return r.ok;
   }catch(e){ return false; }
 }
-const apiRegister=()=>sb('players?on_conflict=email',
-  {email:S.email,name:S.name,token:S.token,airline:S.airline,consent:true,utm:getUTM()},
+/* All three writes are keyed on (email, campaign), never on email alone. The same person can
+   play the travel show in March and the annual campaign in the autumn; those are two
+   registrations, two passports and two separate stacks of entries that never pool together. */
+const apiRegister=()=>sb('players?on_conflict=email,campaign',
+  {email:S.email,campaign:CONFIG.campaign,name:S.name,token:S.token,airline:S.airline,consent:true,utm:getUTM()},
   'resolution=merge-duplicates,return=minimal');
 let syncT=null;
 function apiProgress(){
   if(CONFIG.backend!=='supabase') return;
   clearTimeout(syncT);
-  syncT=setTimeout(()=>sb('progress?on_conflict=email',
-    {email:S.email,collected:S.collected,lap:S.lap,pos:S.pos,pass:S.pass},
+  syncT=setTimeout(()=>sb('progress?on_conflict=email,campaign',
+    {email:S.email,campaign:CONFIG.campaign,collected:S.collected,lap:S.lap,pos:S.pos,pass:S.pass},
     'resolution=merge-duplicates,return=minimal'),1500);
 }
-const apiEntry=(tier,pts)=>sb('entries',{email:S.email,tier,pts});
+const apiEntry=(tier,pts)=>sb('entries',{email:S.email,campaign:CONFIG.campaign,tier,pts});
 
 /* ══════════ DATA ══════════ */
 const REGIONS = {
@@ -831,8 +879,13 @@ function s_region(i){ return /dest/.test(SPACES[i].t) ? SPACES[i].region : null;
 /* atAirport: OhBear has landed at TPE but hasn't taken the Airport MRT into
    Taipei Main Station yet. True only until the very first roll. */
 let S = {name:'', email:'', token:null, airline:null, pos:0, lap:1, collected:[], tiers:['checkin'], pass:false, factIdx:0, started:false, atAirport:false};
-function save(){ try{ localStorage.setItem('ttaRally', JSON.stringify(S)); }catch(e){} }
-function load(){ try{ const d=JSON.parse(localStorage.getItem('ttaRally')); if(d && d.started) S=d; }catch(e){} }
+/* Saved progress is namespaced by campaign. Without this a player who filled half a passport
+   at the travel show would come back for the annual campaign and find that half-passport
+   already waiting, carrying stamps and entry tiers earned against a prize that was already
+   drawn. Each campaign gets its own slot in the same browser. */
+const SKEY = 'ttaRally:' + CONFIG.campaign;
+function save(){ try{ localStorage.setItem(SKEY, JSON.stringify(S)); }catch(e){} }
+function load(){ try{ const d=JSON.parse(localStorage.getItem(SKEY)); if(d && d.started) S=d; }catch(e){} }
 const got = i => S.collected.includes(i);
 const entries = () => TIERS.filter(t=>S.tiers.includes(t.id)).reduce((s,t)=>s+t.pts,0);
 /* the airline the player chose at check-in — the one that flew them SFO → TPE */
@@ -1382,9 +1435,33 @@ function initCheckin(){
     b.onclick=()=>{ aw.querySelectorAll('.tok').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.airline=a.id; };
     aw.appendChild(b);
   });
+  /* Booth code: only shown when this build is an on-site campaign. */
+  if(CONFIG.accessCode) document.getElementById('ckCodeRow').classList.remove('hidden');
+  /* Each sweepstakes has its own Official Rules — separate pools, separate entry periods,
+     separate prizes — so the link is per campaign rather than one house rules page. */
+  if(CONFIG.rulesUrl){ const a=document.getElementById('ckRules');
+    if(a){ a.href=CONFIG.rulesUrl; a.target='_blank'; a.rel='noopener'; a.onclick=null; } }
+  /* Outside the entry window there is nothing to check in to, so the form is replaced rather
+     than left to fail on submit — a dead Check In button at a booth reads as a broken game. */
+  if(campaignOpen!=='open'){
+    const early = campaignOpen==='early';
+    document.querySelector('.ck-form').innerHTML=
+      `<div class="ck-closed">
+         <h3>${early?'Not open yet':'This rally has ended'}</h3>
+         <p>${early
+            ? `Entries for ${CONFIG.campaignName} open on ${new Date(CONFIG.opens).toLocaleDateString(undefined,{month:'long',day:'numeric'})}. Come back and roll with us then.</p>`
+            : `Thank you to everyone who rallied around the island with us. This sweepstakes is closed and the draw for ${CONFIG.prize} is being made.</p>`}
+         <p class="ck-fine">Taiwan is still waiting — plan the real trip at <a href="https://eng.taiwan.net.tw" target="_blank" rel="noopener">eng.taiwan.net.tw</a>.</p>
+       </div>`;
+    return;
+  }
   document.getElementById('ckStart').onclick=()=>{
     S.name=document.getElementById('ckName').value.trim()||'Traveler';
     S.email=document.getElementById('ckEmail').value.trim().toLowerCase();
+    if(CONFIG.accessCode){
+      const given=(document.getElementById('ckCode').value||'').trim().toLowerCase();
+      if(given!==CONFIG.accessCode.trim().toLowerCase()){ toast('That event code isn\'t right — our booth staff can give you one 🎟️'); return; }
+    }
     if(CONFIG.backend==='supabase'){
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(S.email)){ toast('Please enter a valid email — it\'s your sweepstakes entry 🎟️'); return; }
       if(!document.getElementById('ckConsent').checked){ toast('Please agree to the Official Rules to enter.'); return; }
@@ -1810,11 +1887,16 @@ document.getElementById('lnkReset').onclick=()=>{
       <div style="height:8px"></div>
       <button class="btn btn-ghost" id="rsNo">Cancel</button>
     </div>`);
-  m.querySelector('#rsYes').onclick=()=>{ try{localStorage.removeItem('ttaRally');}catch(e){} location.reload(); };
+  m.querySelector('#rsYes').onclick=()=>{ try{localStorage.removeItem(SKEY);}catch(e){} location.reload(); };
   m.querySelector('#rsNo').onclick=()=>closeModal(m);
 };
 
 /* ══════════ INIT ══════════ */
+/* Anywhere the page names what is being played for, the words come from CONFIG rather than
+   the markup, so pointing this build at a different sweepstakes can't leave the previous
+   campaign's prize sitting in the copy. */
+document.querySelectorAll('[data-prize]').forEach(el=>{ el.textContent=CONFIG.prize; });
+document.querySelectorAll('[data-prize-short]').forEach(el=>{ el.textContent=CONFIG.prizeShort; });
 load();
 renderBoard();
 initCheckin();
